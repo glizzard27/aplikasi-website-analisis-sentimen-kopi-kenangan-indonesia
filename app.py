@@ -57,11 +57,17 @@ def load_model_assets():
         return None, None, None
 
 # Fungsi untuk prediksi sentimen
-def predict_sentiment(text, model, tokenizer, label_encoder, device):
-    if model is None: return "Error: Model tidak dimuat"
-    
-    processed_text = full_preprocess(text)
-    inputs = tokenizer(processed_text, return_tensors="pt", padding=True, truncation=True, max_length=128).to(device)
+def predict_sentiment_preprocessed(preprocessed_text, model, tokenizer, label_encoder, device):
+    if model is None:
+        return "Error: Model tidak dimuat", {}
+
+    inputs = tokenizer(
+        preprocessed_text,
+        return_tensors="pt",
+        padding=True,
+        truncation=True,
+        max_length=128
+    ).to(device)
     
     model.eval()
     with torch.no_grad():
@@ -70,8 +76,17 @@ def predict_sentiment(text, model, tokenizer, label_encoder, device):
         probabilities = F.softmax(logits, dim=1)[0]
         predicted_class_id = torch.argmax(probabilities).item()
         predicted_label = label_encoder.classes_[predicted_class_id]
-        all_probabilities = {label: prob.item() for label, prob in zip(label_encoder.classes_, probabilities)}
+        all_probabilities = {
+            label: prob.item()
+            for label, prob in zip(label_encoder.classes_, probabilities)
+        }
+
     return predicted_label, all_probabilities
+
+def predict_sentiment(text, model, tokenizer, label_encoder, device):
+    preprocessed = full_preprocess(text)
+    return predict_sentiment_preprocessed(preprocessed, model, tokenizer, label_encoder, device)
+
 
 # Fungsi untuk memuat contoh ulasan dari test dataset
 @st.cache_data
@@ -252,7 +267,8 @@ elif page == "Analisis Sentimen Tunggal":
         text_to_analyze = st.session_state.user_input
         if text_to_analyze and model:
             with st.spinner('Menganalisis...'):
-                prediction, all_probs = predict_sentiment(text_to_analyze, model, tokenizer, label_encoder, device)
+                preprocessed = full_preprocess(text_to_analyze)
+                prediction, all_probs = predict_sentiment_preprocessed(preprocessed, model, tokenizer, label_encoder, device)
             st.subheader("Hasil Analisis:")
             if prediction == "positif": st.success(f"Sentimen: **{prediction.capitalize()}**")
             elif prediction == "negatif": st.error(f"Sentimen: **{prediction.capitalize()}**")
@@ -300,7 +316,7 @@ elif page == "Analisis Sentimen Batch":
                 for i, ulasan in enumerate(list_ulasan_mentah):
                     ulasan_bersih = full_preprocess(ulasan)
                     list_ulasan_bersih.append(ulasan_bersih)
-                    prediksi, _ = predict_sentiment(ulasan_bersih, model, tokenizer, label_encoder, device)
+                    prediksi, _ = predict_sentiment_preprocessed(ulasan_bersih, model, tokenizer, label_encoder, device)
                     hasil_prediksi.append(prediksi)
                     progress_bar.progress((i + 1) / len(list_ulasan_mentah), text=f"Ulasan {i+1}/{len(list_ulasan_mentah)}")
                 progress_bar.empty()
